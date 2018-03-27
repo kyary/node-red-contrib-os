@@ -16,8 +16,11 @@
 
 module.exports = function(RED) {
     var settings = RED.settings;
-    var os = require('os');
-    var df = require('node-df');
+    const os = require('os');
+    const df = require('node-df');
+    const fs = require('fs');
+    const Promise = require('promise');
+    const util = require('util');
 
     function OS(n) {
         RED.nodes.createNode(this,n);
@@ -32,7 +35,7 @@ module.exports = function(RED) {
                 arch: os.arch(),
                 release: os.release(),
                 endianness: os.endianness(),
-                tmpdir: os.tmpdir()                
+                tmpdir: os.tmpdir()
             };
             node.send(msg);
         });
@@ -103,12 +106,48 @@ module.exports = function(RED) {
         this.name = n.name;
 
         node.on("input", function(msg) {
-            var tmem = os.totalmem();
-            var fmem = os.freemem();
-            var pmem = (100 - (fmem/tmem)*100).toFixed(2);
-            msg.payload = {totalmem: tmem, freemem: fmem, memusage: pmem};
+          var tmem = os.totalmem();
+          var fmem = os.freemem();
+          var pmem = (100 - (fmem/tmem)*100).toFixed(2);
+          msg.payload = {totalmem: tmem, freemem: fmem, memusage: pmem};
+          if (os.platform() == 'linux') {
+            MemoryLinux(node, msg);
+          } else {
             node.send(msg);
+          }
         });
+    }
+
+    function fetchData(path) {
+        return new Promise(function(resolve, reject) {
+            fs.readFile(path, 'utf8', (err, data) => {
+                if(err) reject(err);
+                resolve(data)
+            });
+        });
+    }
+
+    function MemoryLinux(node, msg) {
+      const pattern = /^(\w+):\s+(\d+)/;
+      const path = '/proc/meminfo';
+      var dataPromise = fetchData(path);
+      var memory = msg.payload;
+
+      dataPromise.then(data => {
+        memInfoLines = data.toString().split(/\n/g);
+        for (var i = 0; i < memInfoLines.length; i++) {
+          var line = memInfoLines[i];
+          if (pattern.test(line)) {
+            var key = RegExp.$1;
+            memory[key] = parseInt(RegExp.$2, 10);
+            if (line.endsWith('kB')) memory[key] = memory[key] * 1024;
+          }
+        }
+        msg.payload = memory
+        node.send(msg);
+      }).catch(function(err) {
+        node.error(err);
+      });
     }
 
     RED.nodes.registerType("Memory",Memory);

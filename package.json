@@ -4,7 +4,8 @@
   "description": "Node-Red nodes for obtaining cpu system information.",
   "main": "os/os.js",
   "dependencies": {
-    "node-df": "^0.1.1"
+    "node-df": "^0.1.1",
+    "promise": "^8.0.1"
   },
   "devDependencies": {},
   "scripts": {
